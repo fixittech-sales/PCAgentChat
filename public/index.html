@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0f0f0f" />
+  <title>Agent Chat</title>
+  <link rel="manifest" href="/public/manifest.json" />
+  <link rel="apple-touch-icon" href="/public/icons/icon.svg" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --accent: #4f8ef7;
+      --accent-dim: #3a6dd4;
+      --text: #f0f0f0;
+      --text-muted: #888;
+      --bubble-user: #4f8ef7;
+      --bubble-agent: #252525;
+      --input-bg: #1e1e1e;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; }
+
+    #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+    /* Header */
+    #header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: calc(var(--safe-top) + 12px) 16px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    #agent-avatar {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #7c4dff);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    #agent-info { flex: 1; min-width: 0; }
+    #agent-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #agent-status { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #555; display: inline-block; }
+    .status-dot.online { background: #22c55e; }
+
+    /* Messages */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+    #messages::-webkit-scrollbar { display: none; }
+
+    .msg-row { display: flex; flex-direction: column; max-width: 75%; }
+    .msg-row.user { align-self: flex-end; align-items: flex-end; }
+    .msg-row.agent { align-self: flex-start; align-items: flex-start; }
+
+    .bubble {
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.45;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .msg-row.user .bubble { background: var(--bubble-user); color: #fff; border-bottom-right-radius: 4px; }
+    .msg-row.agent .bubble { background: var(--bubble-agent); color: var(--text); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
+
+    .bubble img { max-width: 100%; max-height: 280px; border-radius: 10px; display: block; margin-top: 4px; cursor: pointer; }
+    .bubble a { color: var(--accent); }
+    .file-chip { display: inline-block; margin-top: 4px; padding: 6px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; font-size: 13px; }
+
+    /* PDF attachment preview */
+    .pdf-card {
+      display: block; margin-top: 6px;
+      width: 220px; max-width: 100%;
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; cursor: pointer;
+    }
+    .pdf-card-thumb {
+      height: 170px; overflow: hidden; background: #f4f4f4;
+      display: flex; align-items: flex-start; justify-content: center;
+    }
+    .pdf-card-thumb canvas { width: 100%; height: auto; display: block; }
+    .pdf-card-fallback { height: 170px; display: flex; align-items: center; justify-content: center; font-size: 44px; }
+    .pdf-loading { padding-top: 56px; font-size: 36px; opacity: 0.5; }
+    .pdf-card-label {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 10px; background: #f0f0f0; color: #222; font-size: 12px;
+    }
+    .pdf-card-label .pdf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .msg-time { font-size: 11px; color: var(--text-muted); margin-top: 3px; padding: 0 4px; }
+
+    .msg-row + .msg-row.user,
+    .msg-row + .msg-row.agent { margin-top: 8px; }
+
+    /* Typing indicator */
+    .typing-bubble { display: flex; gap: 4px; align-items: center; padding: 12px 16px; }
+    .typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); animation: bounce 1.2s infinite; }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+
+    /* Scroll anchor */
+    #anchor { height: 1px; }
+
+    /* Input bar */
+    #input-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 8px 12px calc(var(--safe-bottom) + 8px);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+
+    #attach-btn, #send-btn {
+      flex-shrink: 0;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    #attach-btn { background: var(--input-bg); color: var(--text-muted); }
+    #attach-btn:hover { background: var(--border); }
+    #send-btn { background: var(--accent); color: #fff; }
+    #send-btn:hover { background: var(--accent-dim); }
+    #send-btn:active, #attach-btn:active { transform: scale(0.92); }
+    #send-btn:disabled { background: #333; cursor: default; }
+
+    #msg-input {
+      flex: 1;
+      min-height: 40px;
+      max-height: 120px;
+      padding: 10px 14px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+      line-height: 1.4;
+      -webkit-overflow-scrolling: touch;
+    }
+    #msg-input:focus { border-color: var(--accent); }
+    #msg-input::placeholder { color: var(--text-muted); }
+
+    #file-input { display: none; }
+
+    /* Upload preview */
+    #upload-preview {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    #upload-preview.visible { display: flex; }
+    #preview-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+    #preview-name { flex: 1; font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #preview-cancel { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 4px; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+      background: #333; color: #fff; padding: 8px 16px; border-radius: 20px;
+      font-size: 14px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 100;
+    }
+    #toast.show { opacity: 1; }
+
+    /* Fullscreen image */
+    #img-viewer {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+      z-index: 200; align-items: center; justify-content: center;
+    }
+    #img-viewer.open { display: flex; }
+    #img-viewer img { max-width: 95vw; max-height: 90vh; border-radius: 8px; }
+    #img-viewer iframe { width: 95vw; height: 88vh; border: none; border-radius: 8px; background: #fff; }
+    #img-viewer-close { position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,0.1); border: none; color: #fff; font-size: 24px; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; z-index: 2; }
+    #pdf-viewer-open {
+      position: absolute; bottom: calc(var(--safe-bottom) + 16px); left: 50%; transform: translateX(-50%);
+      background: var(--accent); color: #fff; text-decoration: none;
+      padding: 9px 18px; border-radius: 20px; font-size: 14px; font-weight: 600;
+    }
+
+    /* Loading */
+    #loading { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div id="agent-avatar">🤖</div>
+    <div id="agent-info">
+      <div id="agent-name">Loading…</div>
+      <div id="agent-status"><span class="status-dot" id="status-dot"></span><span id="status-text">connecting</span></div>
+    </div>
+  </div>
+
+  <div id="messages">
+    <div id="loading">Loading conversation…</div>
+    <div id="anchor"></div>
+  </div>
+
+  <div id="upload-preview">
+    <img id="preview-thumb" src="" alt="" />
+    <span id="preview-name"></span>
+    <button id="preview-cancel">×</button>
+  </div>
+
+  <div id="input-bar">
+    <button id="attach-btn" title="Attach file">📎</button>
+    <input type="file" id="file-input" accept="image/*,video/*,.pdf,.doc,.docx,.txt" multiple />
+    <textarea id="msg-input" placeholder="Message…" rows="1"></textarea>
+    <button id="send-btn" title="Send" disabled>↑</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="img-viewer">
+  <button id="img-viewer-close">×</button>
+  <img id="img-viewer-src" src="" alt="fullscreen" />
+  <iframe id="pdf-viewer-src" title="PDF preview" style="display:none"></iframe>
+  <a id="pdf-viewer-open" href="#" target="_blank" rel="noopener" style="display:none">Open PDF in new tab ↗</a>
+</div>
+
+<script src="/public/pdf.min.js"></script>
+<script src="/public/chat.js"></script>
+</body>
+</html>

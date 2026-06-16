@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Secrets / environment
+.env
+
+# Private company list (copy companies.example.json to companies.json)
+companies.json
+
+# Manual backups (history is tracked by git now)
+*.bak
+*.bak2
+
+# Runtime database
+/data/*.sqlite
+/data/*.sqlite-shm
+/data/*.sqlite-wal
+
+# Logs / OS cruft
+*.log
+.DS_Store
